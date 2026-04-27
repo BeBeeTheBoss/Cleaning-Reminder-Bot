@@ -88,7 +88,7 @@ function buildSummaryText(records, dateKey) {
   for (const [team, members] of Object.entries(teams)) {
     members.forEach((member) => {
       const isDone = doneSenders.has(member);
-      const status = isDone ? "✅ Done" : "❌ Missing";
+      const status = isDone ? "✅ Done" : "❌ Not Cleaned";
       if (!isDone) allCompleted = false;
       table += `${formatRow(getDisplayName(member), team.toUpperCase(), status)}\n`;
     });
