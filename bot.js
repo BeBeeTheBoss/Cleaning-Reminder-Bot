@@ -118,8 +118,8 @@ bot.onText(/\/summary/, (msg) => {
   bot.sendMessage(chatId, text, { parse_mode: "HTML" });
 });
 
-/** 📸 REPORT HANDLER */
-bot.on("photo", (msg) => {
+/** 📸 REPORT PROCESSOR */
+function processPhotoReport(msg) {
   const chatId = msg.chat.id;
 
   const sender =
@@ -177,4 +177,8 @@ bot.on("photo", (msg) => {
   //   }
 
   //   bot.sendMessage(chatId, "Message received 👍");
-});
+}
+
+/** 📸 REPORT HANDLERS */
+bot.on("photo", processPhotoReport);
+bot.on("edited_message_caption", processPhotoReport);
