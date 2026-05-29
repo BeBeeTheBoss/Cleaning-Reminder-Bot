@@ -14,6 +14,7 @@ const teams = {
     "Mg Mg Myat Thin",
     "Min Htet Pyae Win",
     "Shein Htet",
+    "Waiphone Myint(LT IT)"
   ],
   database: [
     "Kaung Myat Kyaw SD",
@@ -40,6 +41,7 @@ const displayNames = {
   "Khine Mar Htun HO_SD": "Khine Mar Htun",
   Ash: "Yamone Myo Nyunt",
   "nang cherry": "Nang Cherry",
+  "Waiphone Myint(LT IT)": "Waiphone Myint",
 };
 
 /** 📦 Load */
