@@ -112,7 +112,7 @@ async function verifyWorkspaceCleaning(photo) {
         format: "json",
         images: [imageBase64],
         prompt:
-          "You are reviewing a workplace-cleaning report photo. First decide whether the photo clearly shows an indoor office workspace (desk, work area, or surrounding floor). If it does not, set isWorkspace to false. Use a practical and lenient cleaning standard: normal work equipment and supplies such as a monitor, laptop, keyboard, mouse, work cables, calendar, notebook, and one water bottle are acceptable. A workspace does NOT need to look empty or perfectly arranged. Set isClean to false only for clearly poor hygiene or obvious untidiness, such as rubbish, food remains or dirty dishes, spills, many unrelated personal items, a heavily cluttered surface that prevents work, or visibly dirty/neglected desk or floor. Do not reject solely because cables are visible, work equipment is present, or items are not perfectly aligned. Set isClean true for a reasonably clean, usable workspace. Give practical, short recommendations only when they are genuinely useful; recommendations may be empty for an acceptable workspace. Write summary and every recommendation only in Burmese (Myanmar language), with no English. Return only JSON in this exact shape: {\"isWorkspace\":true|false,\"isClean\":true|false,\"summary\":\"Burmese short assessment\",\"recommendations\":[\"Burmese recommendation\"]}. For a non-workspace photo, isClean must be false and recommend sending a clear workspace photo.",
+          "You are reviewing a workplace-cleaning report photo. First decide whether the photo clearly shows an indoor office workspace (desk, work area, or surrounding floor). If it does not, set isWorkspace to false. Use a practical and lenient standard for normal work equipment: monitor, laptop, keyboard, mouse, work cables, calendar, notebook, and one water bottle are acceptable. A workspace does NOT need to look empty or perfectly arranged. However, before accepting, carefully scan the whole visible desk and floor, including under and beside monitors, for food/snack containers, cups, wrappers, food remains, dirty dishes, or rubbish. Any visible food or snack container, wrapper, food remains, dirty cup, or rubbish means hasFoodOrRubbish must be true and isClean must be false. Also reject major clutter, spills, many unrelated personal items, or visibly dirty/neglected desk or floor. Do not reject solely because cables are visible, work equipment is present, or items are not perfectly aligned. Give practical, short recommendations only when genuinely useful; recommendations may be empty when accepted. Write summary and every recommendation only in Burmese (Myanmar language), with no English. Return only JSON in this exact shape: {\"isWorkspace\":true|false,\"isClean\":true|false,\"hasFoodOrRubbish\":true|false,\"summary\":\"Burmese short assessment\",\"recommendations\":[\"Burmese recommendation\"]}. For a non-workspace photo, isClean must be false and recommend sending a clear workspace photo.",
       }),
     });
   } catch (error) {
@@ -142,13 +142,20 @@ async function verifyWorkspaceCleaning(photo) {
     );
   }
 
-  if (typeof verdict.isWorkspace !== "boolean" || typeof verdict.isClean !== "boolean") {
+  if (
+    typeof verdict.isWorkspace !== "boolean" ||
+    typeof verdict.isClean !== "boolean" ||
+    typeof verdict.hasFoodOrRubbish !== "boolean"
+  ) {
     throw new Error("Ollama response did not include a valid workspace review");
   }
 
   return {
     isWorkspace: verdict.isWorkspace,
-    isClean: verdict.isClean,
+    // A detected food container or rubbish must never be accepted, even when
+    // the model's general cleanliness assessment is inconsistent.
+    isClean: verdict.isClean && !verdict.hasFoodOrRubbish,
+    hasFoodOrRubbish: verdict.hasFoodOrRubbish,
     summary:
       typeof verdict.summary === "string" && verdict.summary.trim()
         ? verdict.summary.trim()
