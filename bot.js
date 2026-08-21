@@ -20,14 +20,13 @@ const teams = {
     "Kaung Myat Kyaw SD",
     "Khine Mar Htun HO_SD",
     "Zay Yar Phyoe Paing",
-    "Ash",
-    "nang cherry",
+    "Nang Cherry HO SD",
+    "Htaik Htaik"
   ],
   web: [
-    "Wut Yee Phyo",
+    "Wut Yee Phyo_HO-SD",
     "Thoon Shwe Yi Kyaw (SD - HO)",
-    "Hnin Su Wai",
-    "Thinzar Nwe",
+    "Min Thu Kha",
     "BeBee",
     "Aung Chan Nyein",
   ],
@@ -39,9 +38,10 @@ const displayNames = {
   "Thoon Shwe Yi Kyaw (SD - HO)": "Thoon Shwe Yi Kyaw",
   "Kaung Myat Kyaw SD": "Kaung Myat Kyaw",
   "Khine Mar Htun HO_SD": "Khine Mar Htun",
-  Ash: "Yamone Myo Nyunt",
-  "nang cherry": "Nang Cherry",
+  "Yamone Myo nyunt HO SD": "Yamone Myo Nyunt",
+  "Nang Cherry HO SD": "Nang Cherry",
   "Waiphone Myint(LT IT)": "Waiphone Myint",
+  "Wut Yee Phyo_HO-SD": "Wut Yee Phyo"
 };
 
 /** 📦 Load */
