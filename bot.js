@@ -1,14 +1,25 @@
 require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
 const fs = require("fs");
+const http = require("http");
 
-const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
+const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, {
+  polling: {
+    params: {
+      // Reactions are separate `message_reaction` updates. The bot only needs
+      // new messages and caption edits for cleaning reports.
+      allowed_updates: ["message", "edited_message"],
+    },
+  },
+});
 
 const FILE = "records.json";
 const TIMEZONE = "Asia/Yangon";
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "gemma4:31b-cloud";
 const OLLAMA_TIMEOUT_MS = 60_000;
+const API_PORT = Number(process.env.API_PORT) || 3000;
+const processingReports = new Set();
 
 function getNetworkErrorDetails(error) {
   const cause = error.cause;
@@ -22,7 +33,8 @@ const teams = {
     "Mg Mg Myat Thin",
     "Min Htet Pyae Win",
     "Shein Htet",
-    "Waiphone Myint(LT IT)"
+    "Waiphone Myint(LT IT)",
+    "Aung Kyaw"
   ],
   database: [
     "Kaung Myat Kyaw SD",
@@ -49,7 +61,8 @@ const displayNames = {
   "Yamone Myo nyunt HO SD": "Yamone Myo Nyunt",
   "Nang Cherry HO SD": "Nang Cherry",
   "Waiphone Myint(LT IT)": "Waiphone Myint",
-  "Wut Yee Phyo_HO-SD": "Wut Yee Phyo"
+  "Wut Yee Phyo_HO-SD": "Wut Yee Phyo",
+  "Aung Kyaw": "Aung Kyaw Myint"
 };
 
 /** 📦 Load */
@@ -216,18 +229,64 @@ function buildSummaryText(records, dateKey) {
   return { text, allCompleted };
 }
 
-/** 📊 SUMMARY */
-bot.onText(/\/summary/, (msg) => {
-  const chatId = msg.chat.id;
+async function sendSummary(chatId) {
   const data = load();
   const today = getDateKey(new Date());
   const { text } = buildSummaryText(data, today);
-  bot.sendMessage(chatId, text, { parse_mode: "HTML" });
+  await bot.sendMessage(chatId, text, { parse_mode: "HTML" });
+}
+
+/** 📊 SUMMARY */
+bot.onText(/\/summary/, async (msg) => {
+  await sendSummary(msg.chat.id);
+});
+
+/** 🌐 SUMMARY API */
+const apiServer = http.createServer((req, res) => {
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+
+  if (req.method !== "POST" || req.url !== "/api/summary") {
+    res.writeHead(404);
+    res.end(JSON.stringify({ ok: false, error: "Not found" }));
+    return;
+  }
+
+  let rawBody = "";
+  req.on("data", (chunk) => {
+    rawBody += chunk;
+    if (rawBody.length > 10_000) req.destroy();
+  });
+
+  req.on("end", async () => {
+    try {
+      const body = JSON.parse(rawBody || "{}");
+      const chatId = body.chatId ?? process.env.SUMMARY_CHAT_ID;
+
+      if (!chatId || !/^-?\d+$/.test(String(chatId))) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ ok: false, error: "A valid chatId is required" }));
+        return;
+      }
+
+      await sendSummary(chatId);
+      res.writeHead(200);
+      res.end(JSON.stringify({ ok: true, message: "Summary sent" }));
+    } catch (error) {
+      console.error("Summary API failed:", error.message);
+      res.writeHead(500);
+      res.end(JSON.stringify({ ok: false, error: "Failed to send summary" }));
+    }
+  });
+});
+
+apiServer.listen(API_PORT, () => {
+  console.log(`Summary API listening on port ${API_PORT}`);
 });
 
 /** 📸 REPORT PROCESSOR */
 async function processPhotoReport(msg) {
   const chatId = msg.chat.id;
+  const reportKey = `${chatId}:${msg.message_id}`;
 
   const sender =
     `${msg.from.first_name || ""}${msg.from.last_name ? " " + msg.from.last_name : ""}`.trim();
@@ -245,6 +304,20 @@ async function processPhotoReport(msg) {
 
     if (!isReport) return;
 
+    // Telegram may deliver another update for the same message. Do not run AI
+    // verification twice or create duplicate records for an accepted report.
+    if (processingReports.has(reportKey)) return;
+
+    const existingRecords = load();
+    const alreadyRecorded = existingRecords.some(
+      (record) =>
+        String(record.sourceChatId) === String(chatId) &&
+        record.sourceMessageId === msg.message_id,
+    );
+    if (alreadyRecorded) return;
+
+    processingReports.add(reportKey);
+
     let verification;
     try {
       verification = await verifyWorkspaceCleaning(msg.photo);
@@ -255,6 +328,7 @@ async function processPhotoReport(msg) {
         "⚠️ ပုံကို AI နဲ့စစ်ဆေးလို့မရသေးပါ။ ခဏနေရင် ပြန်ပို့ပေးပါနော်။",
         { reply_to_message_id: msg.message_id },
       );
+      processingReports.delete(reportKey);
       return;
     }
 
@@ -264,6 +338,7 @@ async function processPhotoReport(msg) {
         `😠 ဒီပုံက Workspace ပုံမဟုတ်သေးပါနော်။ Workspace နေရာကို ထင်ရှားစွာမြင်ရတဲ့ပုံ ထည့်ပြီး “workspace cleaning done” လို့ ပြန်ပို့ပေးပါ။\n\n${verification.summary}${formatRecommendations(verification.recommendations)}\n\nဒီပုံကို Record ထဲ မမှတ်ထားပါဘူး။`,
         { reply_to_message_id: msg.message_id },
       );
+      processingReports.delete(reportKey);
       return;
     }
 
@@ -273,6 +348,7 @@ async function processPhotoReport(msg) {
         `😠 Workspace ကို သန့်ရှင်းပြီးကြောင်း အတည်မပြုနိုင်သေးပါနော်။ အောက်ကအချက်တွေကို ပြန်သန့်ရှင်းပြီး Workspace တစ်ခုလုံးထင်ရှားတဲ့ပုံနဲ့ ပြန်ပို့ပေးပါ။\n\n${verification.summary}${formatRecommendations(verification.recommendations)}\n\nဒီပုံကို Record ထဲ မမှတ်ထားပါဘူး။`,
         { reply_to_message_id: msg.message_id },
       );
+      processingReports.delete(reportKey);
       return;
     }
 
@@ -284,6 +360,8 @@ async function processPhotoReport(msg) {
       sender,
       username,
       team,
+      sourceChatId: chatId,
+      sourceMessageId: msg.message_id,
       caption: normalizedCaption,
       date: new Date().toISOString(),
       aiVerified: true,
@@ -294,6 +372,7 @@ async function processPhotoReport(msg) {
     });
 
     save(records);
+    processingReports.delete(reportKey);
 
     bot.sendMessage(
       chatId,
